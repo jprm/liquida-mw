@@ -136,9 +136,15 @@ if uploaded_cortos and uploaded_ins and uploaded_ventas and uploaded_liq:
         )
 
         # Botón de descarga
-        archivo_csv = df_show.to_csv(index=False).encode('utf-8')
+        # Preparamos el CSV en formato europeo para que Excel lo abra perfecto
+        archivo_csv = df_show.to_csv(
+            index=False, 
+            sep=';',         # Separador de columnas: punto y coma
+            decimal=','      # Separador decimal: coma
+        ).encode('utf-8-sig') # 'utf-8-sig' ayuda a Excel a leer acentos y ñ correctamente
+
         st.download_button(
-            label="📥 Descargar Informe Completo (CSV)",
+            label="📥 Descargar Informe Completo (Excel Friendly)",
             data=archivo_csv,
             file_name='balance_liquidaciones_final.csv',
             mime='text/csv'
