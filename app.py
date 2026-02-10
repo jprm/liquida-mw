@@ -94,40 +94,69 @@ if uploaded_cortos and uploaded_ins and uploaded_ventas and uploaded_liq:
         df_balance['SALDO FINAL'] = df_balance['Haber Productor (€)'] - df_balance['Deuda Fees (€)']
 
         # ---------------------------------------------------------
-        # 3. VISUALIZACIÓN
+        # 3. VISUALIZACIÓN (Lógica Corregida)
         # ---------------------------------------------------------
 
-        # Resumen Financiero
+        # CÁLCULO REAL DE RECUPERACIÓN
+        # Creamos una columna auxiliar con lo que realmente te quedas de cada corto
+        # Es el valor MÍNIMO entre "Lo que hay en la caja (Ventas)" y "Lo que te deben (Deuda)"
+        df_balance['Recuperado (€)'] = df_balance[['Haber Productor (€)', 'Deuda Fees (€)']].min(axis=1)
+
+        # Totales Financieros
         total_pagar = df_balance[df_balance['SALDO FINAL'] > 0]['SALDO FINAL'].sum()
-        total_compensado = df_balance[df_balance['SALDO FINAL'] <= 0]['Haber Productor (€)'].sum()
+        
+        # AHORA SÍ: Sumamos lo recuperado de TODOS los cortos (verdes y rojos)
+        total_compensado = df_balance['Recuperado (€)'].sum()
+        
+        # La deuda viva es lo que queda por cobrar de los rojos
         deuda_viva = df_balance[df_balance['SALDO FINAL'] < 0]['SALDO FINAL'].abs().sum()
 
         st.subheader("📊 Resumen Global")
         col1, col2, col3 = st.columns(3)
-        col1.metric("💰 Total a Transferir (Cash Out)", f"{total_pagar:,.2f} €", help="Dinero real que sale de tu banco.")
-        col2.metric("🔄 Ventas Compensadas", f"{total_compensado:,.2f} €", help="Dinero de ventas que te quedas para cubrir deudas de fees.")
-        col3.metric("📉 Deuda Fees Pendiente", f"{deuda_viva:,.2f} €", delta_color="inverse", help="Dinero que te siguen debiendo tras descontar ventas.")
+        
+        col1.metric(
+            "💰 Total a Transferir (Cash Out)", 
+            f"{total_pagar:,.2f} €", 
+            help="Dinero que sale de tu banco hacia los productores."
+        )
+        
+        col2.metric(
+            "✅ Deuda Total Recuperada", 
+            f"{total_compensado:,.2f} €", 
+            help="Dinero de las ventas que TE QUEDAS para cubrir las deudas de fees (tanto de cortos rentables como deudores)."
+        )
+        
+        col3.metric(
+            "📉 Deuda Pendiente (Incobrable)", 
+            f"{deuda_viva:,.2f} €", 
+            delta_color="inverse", 
+            help="Dinero que los productores te siguen debiendo porque sus ventas no fueron suficientes."
+        )
         
         st.divider()
 
-        # Configuración de Colores y Tabla
+        # Configuración de Colores
         def color_logic(val):
-            if val > 0:
+            if val > 0.00:
                 return 'background-color: #d1e7dd; color: #0f5132; font-weight: bold' # Verde
-            elif val < 0:
+            elif val < -0.00:
                 return 'background-color: #f8d7da; color: #842029; font-weight: bold' # Rojo
             return ''
 
         # Preparamos DataFrame final para mostrar
-        df_show = df_balance[['corto_id', 'titulo', 'Haber Productor (€)', 'Deuda Fees (€)', 'SALDO FINAL']].copy()
-        df_show.columns = ['ID', 'Título', 'Ventas Pendientes (+)', 'Deuda Fees (-)', 'A PAGAR / COBRAR']
+        # Añadimos la columna 'Recuperado' para que veas el desglose
+        df_show = df_balance[['corto_id', 'titulo', 'Haber Productor (€)', 'Deuda Fees (€)', 'Recuperado (€)', 'SALDO FINAL']].copy()
+        df_show.columns = ['ID', 'Título', 'Ventas (+)', 'Deuda (-)', 'Retenido (Tú)', 'A PAGAR / COBRAR']
+        
+        # Ordenamos por Saldo
         df_show = df_show.sort_values('A PAGAR / COBRAR', ascending=False)
 
         st.write("### 📋 Detalle por Cortometraje")
         st.dataframe(
             df_show.style.format({
-                'Ventas Pendientes (+)': '{:.2f} €',
-                'Deuda Fees (-)': '{:.2f} €',
+                'Ventas (+)': '{:.2f} €',
+                'Deuda (-)': '{:.2f} €',
+                'Retenido (Tú)': '{:.2f} €',
                 'A PAGAR / COBRAR': '{:.2f} €'
             }).applymap(color_logic, subset=['A PAGAR / COBRAR']),
             use_container_width=True,
